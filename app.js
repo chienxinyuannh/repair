@@ -157,11 +157,22 @@
     gaWork: ['處理中', '待料', '委外處理中'],
     gaSign: ['待主任核示', '待結案簽核']
   };
+  var DIR_SIGN = ['待主任核示', '待結案簽核'];
   function inStatus(list) { return tickets().filter(function (t) { return list.indexOf(t.status) >= 0; }); }
 
   function tabsFor() {
     var mineOpen = tickets().filter(function (t) { return t.mine && !FINAL[t.status]; }).length;
     var open = tickets().filter(function (t) { return !FINAL[t.status]; }).length;
+    if (role() === '主任') {
+      var nSign = inStatus(DIR_SIGN).length;
+      return [
+        { k: 'sign', label: '待我簽', n: nSign, alert: nSign > 0 },
+        { k: 'all', label: '進行中', n: open },
+        { k: 'search', label: '查詢' },
+        { k: 'stats', label: '統計' },
+        { k: 'settings', label: '設定' }
+      ];
+    }
     if (role() === '總務') {
       var nNew = inStatus(GA_LISTS.gaNew).length;
       return [
@@ -180,6 +191,7 @@
   }
 
   function defaultTab() {
+    if (role() === '主任') return inStatus(DIR_SIGN).length ? 'sign' : 'all';
     if (role() === '總務') return inStatus(GA_LISTS.gaNew).length ? 'gaNew' : 'gaWork';
     return 'new';
   }
@@ -202,6 +214,8 @@
     else if (S.tab === 'mine') html += viewMine();
     else if (S.tab === 'all') html += viewAll();
     else if (GA_LISTS[S.tab]) html += viewGaList(S.tab);
+    else if (S.tab === 'sign') html += viewSign();
+    else if (S.tab === 'settings') html += viewSettings();
     else if (S.tab === 'search') html += viewSearch();
     else if (S.tab === 'stats') html += viewStats();
     html += '<div class="foot-note">' + esc(u.name) + ' 使用中　<button class="link" id="switchUser">換人使用</button></div>';
@@ -227,6 +241,7 @@
     });
     if (S.tab === 'search') bindSearch();
     if (S.tab === 'stats') bindStats();
+    if (S.tab === 'settings') bindSettings();
   }
 
   // ===== 報修表單 =====
@@ -394,6 +409,8 @@
       (t.urgency !== '一般' && !FINAL[t.status] ? '<span class="tag u-' + esc(t.urgency) + '">' + esc(t.urgency) + '</span>' : '') +
       '</h3>' +
       '<div class="meta">' + esc(t.floor) + '　' + esc(t.location) + '　' + esc(t.category) + (t.asset && role() !== '一般' ? '　<span class="tag">' + esc(t.asset) + '</span>' : '') + '</div>' +
+      (t.status === '待主任核示' && role() !== '一般' ? '<div class="meta"><b>申請' + esc(t.approvalType) + '</b>' + (t.approvalType === '委外' ? '　' + esc(t.vendor) + '　估價 ' + money(t.quote) : '') + '</div>' : '') +
+      (t.status === '待結案簽核' && role() !== '一般' ? '<div class="meta"><b>' + esc(t.result) + '</b>' + (t.record ? '　' + esc(t.record.slice(0, 30)) + (t.record.length > 30 ? '…' : '') : '') + '</div>' : '') +
       '<div class="meta">' + esc(t.reporterName) + ' ' + md(t.reportDate) + ' 報修' +
       (t.acceptedBy && t.status !== '待接單' && role() !== '一般' ? '　' + esc(t.acceptedBy) + ' 處理' : '') + '</div>' + due +
       (t.status === '待接單' && canWorkRole() ? '<div class="acts"><button class="btn primary sm" data-accept="' + esc(t.id) + '">接單</button></div>' : '') +
@@ -505,6 +522,7 @@
       if (!d.photos.length && !canAddPhoto(t)) h += '<div class="muted small">沒有照片</div>';
 
       if (editing) h += workHtml(t, d);
+      if (role() === '主任' && DIR_SIGN.indexOf(t.status) >= 0) h += signHtml(t, d);
 
       h += '<div class="sec">處理紀錄</div><ul class="timeline">' + d.history.map(function (x) {
         return '<li><b>' + esc(x.to) + '</b>　' + esc(x.by) + ' <span class="t">' + mdt(x.at) + '</span>' +
@@ -724,6 +742,7 @@
     if (dr) dr.onclick = function () { askReturn(t); };
     if (!d) return;
     if (canWork(t)) bindWork(t, d);
+    if (role() === '主任' && DIR_SIGN.indexOf(t.status) >= 0) bindSign(t, d);
     Array.prototype.forEach.call($mbody.querySelectorAll('[data-pid]'), function (el) {
       var pid = el.getAttribute('data-pid');
       el.onclick = function () { if (S.photoCache[pid]) viewPhoto(S.photoCache[pid]); };
@@ -964,6 +983,167 @@
         S.tab = 'search'; S.tabAuto = false; runSearch(); render(); window.scrollTo(0, 0);
       };
     });
+  }
+
+
+  // ===== 主任：待我簽 =====
+  function viewSign() {
+    var a = inStatus(['待主任核示']).sort(byUrgent), c = inStatus(['待結案簽核']).sort(byUrgent);
+    if (!a.length && !c.length) return '<div class="empty">沒有等你簽的單</div>';
+    var h = '';
+    if (a.length) h += '<div class="group">委外或報廢核示 ' + a.length + ' 件</div>' + a.map(card).join('');
+    if (c.length) h += '<div class="group">結案簽核 ' + c.length + ' 件</div>' + c.map(card).join('');
+    return h;
+  }
+
+  function signHtml(t, d) {
+    var after = d.photos.filter(function (p) { return p.kind === '處理後'; }).length;
+    var h = '<div class="sec">主任簽核</div><div class="signbox">';
+    if (t.status === '待主任核示') {
+      h += '<div class="big2">申請' + esc(t.approvalType) + '</div><dl class="kv">' +
+        kv('設備品項', t.asset) +
+        (t.approvalType === '委外' ? kv('廠商', [t.vendor, t.vendorContact, t.vendorPhone].filter(Boolean).join('　')) + kv('估價金額', money(t.quote)) : '') +
+        kv('評估說明', t.assessment) + kv('目前紀錄', t.record) + '</dl>' +
+        '<div class="small muted">' + (t.approvalType === '報廢' ? '核准後進「待結案簽核」，結案結果為報廢。' : '核准後總務聯絡廠商，狀態為「委外處理中」。') + '退回會回到「處理中」。</div>';
+    } else {
+      var cost = [t.materialCost ? '材料 ' + money(t.materialCost) : '', t.vendorCost ? '委外 ' + money(t.vendorCost) : '', t.laborHours ? '工時 ' + t.laborHours + ' 小時' : ''].filter(Boolean).join('、');
+      h += '<div class="big2">結案結果：' + esc(t.result) + '</div><dl class="kv">' +
+        kv('設備品項', t.asset) + kv('處理方式', t.method) + kv('維修紀錄', t.record) +
+        kv('廠商', t.vendor) + kv('費用', cost || '沒有填') +
+        kv('處理後照片', after ? after + ' 張（在上面「照片」）' : '沒有') +
+        kv('完工', t.doneAt ? mdt(t.doneAt) + (t.dueDate && t.doneAt.slice(0, 10) > t.dueDate ? '（超過應完成日 ' + md(t.dueDate) + '）' : '') : '') +
+        '</dl>';
+    }
+    h += '<div class="acts" style="margin-top:12px"><button class="btn danger" id="sNo">退回</button><button class="btn primary" id="sYes">' +
+      (t.status === '待主任核示' ? '核准' + esc(t.approvalType) : '核准結案') + '</button></div></div>';
+    return h;
+  }
+
+  function bindSign(t) {
+    var action = t.status === '待主任核示' ? 'review' : 'closeSign';
+    var yesText = t.status === '待主任核示' ? '核准' + t.approvalType : '核准結案';
+    document.getElementById('sYes').onclick = function () {
+      ask({ title: yesText + '：' + t.id, input: true, placeholder: '意見（選填）', ok: yesText, onOk: function (v) {
+        api(action, { id: t.id, approve: true, comment: v }, false, '送出中…').then(function (r) { after(r, '已' + yesText + ' ' + t.id, false, t.id); }, function () {});
+      } });
+    };
+    document.getElementById('sNo').onclick = function () {
+      ask({ title: '退回 ' + t.id + ' 給總務', input: true, required: true, requiredMsg: '退回請寫意見', danger: true, ok: '退回',
+        placeholder: '要總務補什麼或改什麼', body: '<div class="small">單子回到「處理中」，總務會看到你的意見。</div>',
+        onOk: function (v) {
+          api(action, { id: t.id, approve: false, comment: v }, false, '送出中…').then(function (r) { after(r, '已退回 ' + t.id, false, t.id); }, function () {});
+        } });
+    };
+  }
+
+  // ===== 主任：設定 =====
+  var ROLES = ['一般', '總務', '主任'];
+  function viewSettings() {
+    var users = (S.data.users || []).slice().sort(function (a, b) {
+      return (b.active - a.active) || (ROLES.indexOf(b.role) - ROLES.indexOf(a.role)) || (a.name < b.name ? -1 : 1);
+    });
+    var h = '<div class="panel"><div class="ptitle" style="display:flex;justify-content:space-between;align-items:center">帳號（' + users.filter(function (u) { return u.active; }).length + ' 人使用中）' +
+      '<button class="btn primary sm" id="uAdd">＋新增</button></div>' +
+      '<table class="tbl users"><thead><tr><th>姓名</th><th>角色</th><th>手機</th><th>驗證</th></tr></thead><tbody>' +
+      users.map(function (u) {
+        return '<tr data-uid="' + esc(u.id) + '" class="' + (u.active ? '' : 'off') + '"><td>' + esc(u.name) + '</td><td>' + esc(u.role) + '</td><td>' + esc(u.phone) + '</td><td>' +
+          (!u.active ? '停用' : u.lastLoginAt ? md(u.lastLoginAt) : '<span class="muted">尚未</span>') + '</td></tr>';
+      }).join('') + '</tbody></table>' +
+      '<div class="muted small" style="margin-top:8px">點一列可修改、停用或重設驗證。人很多時，可用試算表的 importUsers 批次匯入。</div></div>';
+    h += optEditor('樓層區域') + optEditor('報修類別');
+    return h;
+  }
+
+  function optEditor(cat) {
+    S.opt = S.opt || {};
+    var cur = S.opt[cat] || (S.opt[cat] = S.data.options[cat].slice());
+    var changed = JSON.stringify(cur) !== JSON.stringify(S.data.options[cat]);
+    return '<div class="panel" data-cat="' + cat + '"><div class="ptitle">' + cat + '</div>' +
+      cur.map(function (v, i) {
+        return '<div class="optrow"><input type="text" value="' + esc(v) + '" data-oi="' + i + '">' +
+          '<button class="btn sm" data-up="' + i + '"' + (i ? '' : ' disabled') + ' aria-label="往上">↑</button>' +
+          '<button class="btn sm" data-down="' + i + '"' + (i < cur.length - 1 ? '' : ' disabled') + ' aria-label="往下">↓</button>' +
+          '<button class="btn sm danger" data-del="' + i + '" aria-label="刪除">✕</button></div>';
+      }).join('') +
+      '<div class="optrow"><input type="text" placeholder="新增一項" data-add="1"><button class="btn sm" data-addbtn="1">加入</button></div>' +
+      '<div class="acts" style="margin-top:10px"><button class="btn sm" data-reset="1"' + (changed ? '' : ' disabled') + '>復原</button>' +
+      '<button class="btn primary sm" data-save="1"' + (changed ? '' : ' disabled') + '>儲存' + cat + '</button></div>' +
+      '<div class="muted small" style="margin-top:6px">改名或刪除不影響已送出的單，舊單保留原本的名稱。</div></div>';
+  }
+
+  function bindSettings() {
+    document.getElementById('uAdd').onclick = function () { userModal(null); };
+    Array.prototype.forEach.call($app.querySelectorAll('[data-uid]'), function (tr) {
+      tr.onclick = function () { userModal(tr.getAttribute('data-uid')); };
+    });
+    Array.prototype.forEach.call($app.querySelectorAll('[data-cat]'), function (box) {
+      var cat = box.getAttribute('data-cat'), cur = S.opt[cat];
+      var redraw = function () { box.outerHTML = optEditor(cat); bindSettings(); };
+      box.querySelectorAll('[data-oi]').forEach(function (inp) {
+        inp.onchange = function () { cur[+inp.getAttribute('data-oi')] = inp.value.trim(); redraw(); };
+      });
+      box.querySelectorAll('[data-up]').forEach(function (b) { b.onclick = function () { var i = +b.getAttribute('data-up'); cur.splice(i - 1, 0, cur.splice(i, 1)[0]); redraw(); }; });
+      box.querySelectorAll('[data-down]').forEach(function (b) { b.onclick = function () { var i = +b.getAttribute('data-down'); cur.splice(i + 1, 0, cur.splice(i, 1)[0]); redraw(); }; });
+      box.querySelectorAll('[data-del]').forEach(function (b) { b.onclick = function () { cur.splice(+b.getAttribute('data-del'), 1); redraw(); }; });
+      var add = box.querySelector('[data-add]');
+      var doAdd = function () {
+        var v = add.value.trim();
+        if (!v) return;
+        if (cur.indexOf(v) >= 0) { toast('已經有「' + v + '」', true); return; }
+        cur.push(v); redraw();
+      };
+      box.querySelector('[data-addbtn]').onclick = doAdd;
+      add.onkeydown = function (e) { if (e.key === 'Enter') { e.preventDefault(); doAdd(); } };
+      box.querySelector('[data-reset]').onclick = function () { S.opt[cat] = S.data.options[cat].slice(); redraw(); };
+      box.querySelector('[data-save]').onclick = function () {
+        var vals = cur.filter(Boolean);
+        if (!vals.length) { toast('至少要留一項', true); return; }
+        api('saveOptions', { category: cat, values: vals }, false, '儲存中…').then(function (r) {
+          setData(r); delete S.opt[cat]; render(); toast(cat + '已儲存');
+        }, function () {});
+      };
+    });
+  }
+
+  function userModal(id) {
+    var u = id ? (S.data.users || []).filter(function (x) { return x.id === id; })[0] : { name: '', phone: '', role: '一般', active: true };
+    var self = id && id === S.data.user.id;
+    var f = { name: u.name, phone: u.phone, role: u.role, active: u.active };
+    var draw = function () {
+      openModal('<h2>' + (id ? '修改帳號' : '新增帳號') + '</h2>' +
+        '<label for="uName">姓名</label><input type="text" id="uName" value="' + esc(f.name) + '">' +
+        '<label for="uPhone">手機</label><input type="tel" id="uPhone" inputmode="numeric" placeholder="09xxxxxxxx" value="' + esc(f.phone) + '">' +
+        '<label>角色</label><div class="choices">' + ROLES.map(function (r) {
+          return '<button type="button" class="choice' + (f.role === r ? ' on' : '') + '" data-role="' + r + '"' + (self ? ' disabled' : '') + '>' + r +
+            '<small>' + { '一般': '報修、看單', '總務': '接單處理、查詢、統計', '主任': '簽核、設定' }[r] + '</small></button>';
+        }).join('') + '</div>' +
+        (id ? '<label class="check" style="margin-top:14px"><input type="checkbox" id="uActive"' + (f.active ? ' checked' : '') + (self ? ' disabled' : '') + '> 啟用（取消勾選就是停用，例如離職）</label>' : '') +
+        (self ? '<div class="muted small" style="margin-top:6px">不能停用自己或改自己的角色。</div>' : '') +
+        '<div class="muted small" style="margin-top:10px">同仁第一次打開系統，輸入這裡的姓名和手機就能使用。</div>' +
+        '<div class="foot">' + (id ? '<button class="btn danger" id="uReset">重設驗證</button>' : '') +
+        '<button class="btn" id="uCancel">取消</button><button class="btn primary" id="uSave">儲存</button></div>');
+      document.getElementById('uName').oninput = function (e) { f.name = e.target.value; };
+      document.getElementById('uPhone').oninput = function (e) { f.phone = e.target.value; };
+      var act = document.getElementById('uActive');
+      if (act) act.onchange = function () { f.active = act.checked; };
+      $mbody.querySelectorAll('[data-role]').forEach(function (b) { b.onclick = function () { f.role = b.getAttribute('data-role'); draw(); }; });
+      document.getElementById('uCancel').onclick = closeModal;
+      document.getElementById('uSave').onclick = function () {
+        var payload = { name: f.name.trim(), phone: f.phone, role: f.role };
+        if (id) { payload.id = id; payload.active = f.active; }
+        api(id ? 'updateUser' : 'createUser', payload, false, '儲存中…').then(function (r) {
+          setData(r); closeModal(); render(); toast(id ? '已更新' : '已新增 ' + payload.name);
+        }, function () {});
+      };
+      var rs = document.getElementById('uReset');
+      if (rs) rs.onclick = function () {
+        if (!confirmInline(rs, '確定？所有裝置要重驗')) return;
+        api('resetLogin', { id: id }, false).then(function (r) {
+          setData(r); closeModal(); render(); toast(f.name + ' 的裝置都要重新驗證');
+        }, function () {});
+      };
+    };
+    draw();
   }
 
   // ===== 啟動 =====
