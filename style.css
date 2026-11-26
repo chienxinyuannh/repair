@@ -30,8 +30,11 @@ button, input, select, textarea { font: inherit; }
 .topbar { position: sticky; top: 0; z-index: 10; background: var(--main); color: #fff;
   display: flex; justify-content: space-between; align-items: center; gap: 8px;
   padding: 10px 14px; padding-top: max(10px, env(safe-area-inset-top)); }
-.brand { font-size: 15px; white-space: nowrap; opacity: .95; }
-.brand b { font-size: 17px; margin-left: 4px; letter-spacing: .5px; }
+.brand { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.brand .logo { display: inline-flex; background: #fff; border-radius: 8px; padding: 2px 6px; }
+.brand .logo img { height: 30px; width: auto; display: block; }
+.brand b { font-size: 17px; letter-spacing: .5px; }
+.vlogo { display: block; width: 150px; height: auto; margin: 0 auto 14px; }
 .who { font-size: 14px; display: flex; gap: 6px; align-items: center; white-space: nowrap; }
 .who .role { background: rgba(255,255,255,.2); border-radius: 10px; padding: 0 8px; font-size: 12px; }
 
@@ -231,5 +234,8 @@ table.users tr.off td:last-child { text-decoration: none; }
 .optrow { display: flex; gap: 6px; margin-top: 6px; align-items: center; }
 .optrow input { flex: 1; min-width: 0; padding: 7px 10px; }
 .optrow .btn.sm { min-width: 36px; padding: 4px 8px; }
-.check { display: flex; gap: 8px; align-items: center; cursor: pointer; font-size: 15px; color: var(--ink); }
-.check input { width: 20px; height: 20px; accent-color: var(--main); }
+.chk { display: flex; gap: 8px; align-items: center; cursor: pointer; font-size: 15px; color: var(--ink); }
+.chk input { width: 20px; height: 20px; accent-color: var(--main); }
+/* 很窄的手機：標題字縮小，再窄就只留 LOGO */
+@media (max-width: 380px) { .brand b { font-size: 15px; } .who { font-size: 13px; } .hbtn { padding: 2px 8px; } }
+@media (max-width: 345px) { .brand b { display: none; } }

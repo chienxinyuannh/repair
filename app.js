@@ -103,6 +103,8 @@
   function viewPhoto(src) { document.getElementById('viewerImg').src = src; $viewer.className = 'viewer'; }
 
   var FINAL = { '已結案': 1, '報廢': 1, '退回': 1 };
+  // 各角色的操作手冊
+  function manualUrl() { return 'UserManual/' + ({ '主任': 'director', '總務': 'ga' }[role()] || 'staff') + '.html'; }
   function role() { return S.data ? S.data.user.role : ''; }
   function tickets() { return S.data ? S.data.tickets : []; }
   function byId(id) { return tickets().filter(function (t) { return t.id === id; })[0] || S.extra[id]; }
@@ -119,12 +121,14 @@
     $who.innerHTML = '';
     $app.innerHTML =
       '<form class="verify" id="vf">' +
+      '<img class="vlogo" src="logo-large.png" alt="芊馨園護理之家">' +
       '<h1>第一次使用，請確認身分</h1>' +
       '<p class="muted small">驗證一次，這支手機或電腦就會記住你，之後打開直接使用。</p>' +
       '<label for="vn">姓名</label><input type="text" id="vn" autocomplete="name" required>' +
       '<label for="vp">手機號碼</label><input type="tel" id="vp" inputmode="numeric" autocomplete="tel" placeholder="09xxxxxxxx" required>' +
       '<button class="btn primary block" type="submit">確認</button>' +
       '<p class="muted small" style="margin-top:14px">名單由主任建立。輸入正確仍無法通過，請洽主任。</p>' +
+      '<p class="small" style="margin-top:4px"><a class="link" href="UserManual/index.html" target="_blank" rel="noopener">第一次用？看使用說明</a></p>' +
       '</form>';
     document.getElementById('vf').onsubmit = function (e) {
       e.preventDefault();
@@ -218,7 +222,8 @@
     else if (S.tab === 'settings') html += viewSettings();
     else if (S.tab === 'search') html += viewSearch();
     else if (S.tab === 'stats') html += viewStats();
-    html += '<div class="foot-note">' + esc(u.name) + ' 使用中　<button class="link" id="switchUser">換人使用</button></div>';
+    html += '<div class="foot-note">' + esc(u.name) + ' 使用中　<button class="link" id="switchUser">換人使用</button>　' +
+      '<a class="link" href="' + manualUrl() + '" target="_blank" rel="noopener">使用說明</a></div>';
     $app.innerHTML = html;
     bind();
   }
@@ -1117,7 +1122,7 @@
           return '<button type="button" class="choice' + (f.role === r ? ' on' : '') + '" data-role="' + r + '"' + (self ? ' disabled' : '') + '>' + r +
             '<small>' + { '一般': '報修、看單', '總務': '接單處理、查詢、統計', '主任': '簽核、設定' }[r] + '</small></button>';
         }).join('') + '</div>' +
-        (id ? '<label class="check" style="margin-top:14px"><input type="checkbox" id="uActive"' + (f.active ? ' checked' : '') + (self ? ' disabled' : '') + '> 啟用（取消勾選就是停用，例如離職）</label>' : '') +
+        (id ? '<label class="chk" style="margin-top:14px"><input type="checkbox" id="uActive"' + (f.active ? ' checked' : '') + (self ? ' disabled' : '') + '> 啟用（取消勾選就是停用，例如離職）</label>' : '') +
         (self ? '<div class="muted small" style="margin-top:6px">不能停用自己或改自己的角色。</div>' : '') +
         '<div class="muted small" style="margin-top:10px">同仁第一次打開系統，輸入這裡的姓名和手機就能使用。</div>' +
         '<div class="foot">' + (id ? '<button class="btn danger" id="uReset">重設驗證</button>' : '') +
